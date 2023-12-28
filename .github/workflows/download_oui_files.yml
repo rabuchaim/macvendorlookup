@@ -1,0 +1,80 @@
+name: Download OUI files and create the 'ouifiles' release
+on:
+  repository_dispatch:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9,21 * * *"
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4.1.1
+      with:
+        # ssh-key: ${{ secrets.REPO_SSH_KEY }}
+        repository: rabuchaim/macvendorlookup
+        sparse-checkout: .
+        ref: main
+    - name: Download OUI files from ieee.org website
+      run: |
+        mkdir files
+        cd files 
+        wget -q -O oui36.txt https://standards-oui.ieee.org/oui36/oui36.txt
+        wget -q -O mam.txt https://standards-oui.ieee.org/oui28/mam.txt
+        wget -q -O oui.txt https://standards-oui.ieee.org/oui/oui.txt
+        wget -q -O cid.txt http://standards-oui.ieee.org/cid/cid.txt
+        wget -q -O oui36.csv https://standards-oui.ieee.org/oui36/oui36.csv
+        wget -q -O mam.csv https://standards-oui.ieee.org/oui28/mam.csv
+        wget -q -O oui.csv https://standards-oui.ieee.org/oui/oui.csv
+        wget -q -O cid.csv http://standards-oui.ieee.org/cid/cid.csv
+        UPDATED=$(ls -l | wc -l)
+        echo "TAG_UPDATED=${UPDATED}" >> $GITHUB_ENV
+
+        DATA=$(TZ=America/Sao_Paulo date +'%d/%m/%Y %H:%M:%S')
+        ESCAPED_DATA=$(echo "${DATA}" | perl -pe 's/\//\\\//g')
+        echo "TAG_DATA=${DATA}" >> $GITHUB_ENV
+        echo "TAG_ESCAPED_DATA=${ESCAPED_DATA}" >> $GITHUB_ENV
+
+        DATA_RELEASE=$(TZ=America/Sao_Paulo date +'%d/%m/%Y')
+        ESCAPED_DATA_RELEASE=$(echo "${DATA_RELEASE}" | perl -pe 's/\//\\\//g')
+        echo "TAG_DATA_RELEASE=${DATA_RELEASE}" >> $GITHUB_ENV
+        echo "TAG_ESCAPED_DATA_RELEASE=${ESCAPED_DATA_RELEASE}" >> $GITHUB_ENV
+        echo """### A mirror of IEEE OUI (Organizationally Unique Identifier) files 
+
+        \- All files have been updated in <b><dia>20/12/2023 23h00m</dia></b>.
+
+        | Description | Filename | IEEE Links |
+        | :---------- | :----------: | ----------------- |
+        | MAC Address Block Large (MA-L) | [oui.csv](https://github.com/rabuchaim/macvendorlookup/releases/download/ouifiles/oui.csv) <br> [oui.txt](https://github.com/rabuchaim/macvendorlookup/releases/download/ouifiles/oui.txt) | Information: https://standards.ieee.org/products-programs/regauth/oui/ <br> Original URL: http://standards-oui.ieee.org/oui/oui.csv or [oui.txt](http://standards-oui.ieee.org/oui/oui.txt) |
+        | MAC Address Block Medium (MA-M) | [mam.csv](https://github.com/rabuchaim/macvendorlookup/releases/download/ouifiles/mam.csv) <br> [mam.txt](https://github.com/rabuchaim/macvendorlookup/releases/download/ouifiles/mam.txt) | Information: https://standards.ieee.org/products-programs/regauth/oui28/ <br> Original URL: http://standards-oui.ieee.org/oui36/oui28.csv or [oui28.txt](http://standards-oui.ieee.org/oui36/oui28.txt) |
+        | MAC Address Block Small (MA-S) | [oui36.csv](https://github.com/rabuchaim/macvendorlookup/releases/download/ouifiles/oui36.csv) <br> [oui36.txt](https://github.com/rabuchaim/macvendorlookup/releases/download/ouifiles/oui36.txt) | Information: https://standards.ieee.org/products-programs/regauth/oui36/ <br> Original URL: http://standards-oui.ieee.org/oui36/oui36.csv or [oui36.txt](http://standards-oui.ieee.org/oui36/oui36.txt) |
+        | Company ID (CID) | [cid.csv](https://github.com/rabuchaim/macvendorlookup/releases/download/ouifiles/cid.csv) <br> [cid.txt](https://github.com/rabuchaim/macvendorlookup/releases/download/ouifiles/cid.txt) | Information: https://standards.ieee.org/products-programs/regauth/cid/ <br> Original URL: http://standards-oui.ieee.org/cid/cid.csv or [cid.txt](http://standards-oui.ieee.org/cid/cid.txt) |
+
+        *You can check the update execution logs in the workflow [download_oui_files.yml](https://github.com/rabuchaim/macvendorlookup/actions/workflows/download_oui_files.yml).*
+        """ > ouifiles.notes.md
+    - name: Modify release notes
+      if: env.TAG_UPDATED == '9'
+      run: |
+        cd files
+        sed -i 's/^[ \t]*//' ouifiles.notes.md
+        sed -i -e 's/<dia>.*<\/dia>/<dia>${{ env.TAG_ESCAPED_DATA }}<\/dia>/g' ouifiles.notes.md
+    - name: Delete the old 'ouifiles' release
+      if: env.TAG_UPDATED == '9'
+      continue-on-error: true
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        cd files
+        gh release list
+        gh release delete ouifiles
+        gh release list
+    - name: Create the new 'ouifiles' release
+      if: env.TAG_UPDATED == '9'
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        cd files
+        git config user.name "${{ github.actor }}"
+        git config user.email "${{ github.actor }}@users.noreply.github.com"
+        gh release create ouifiles *.txt *.csv --title "OUI files ${{ env.TAG_DATA_RELEASE }}" --notes-file "ouifiles.notes.md" --verify-tag
+permissions: write-all
