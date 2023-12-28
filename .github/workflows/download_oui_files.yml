@@ -8,6 +8,13 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4.1.1
+      with:
+        # ssh-key: ${{ secrets.REPO_SSH_KEY }}
+        repository: rabuchaim/macvendorlookup
+        sparse-checkout: .
+        ref: main
     - name: Download OUI files from ieee.org website
       run: |
         mkdir files
